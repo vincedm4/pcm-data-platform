@@ -1,0 +1,1042 @@
+<!-- PRO CAPITAL DATA — PARTNER PORTAL v25 FINAL                              -->
+<!-- Replaces v24. Rebrand: Pro Capital Health -> Pro Capital Data            -->
+<!-- SECURITY FIX: Agency PIN now generated via crypto.getRandomValues()     -->
+<!-- and stored as a SHA-256 hash only — never plaintext in the database.    -->
+<!-- DATABASE: Firebase calls replaced with Supabase calls throughout.       -->
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+<style>
+/* ── RESET + ISOLATION ─────────────────────────────────────────────────── */
+#pcm-portal *, #pcm-portal *::before, #pcm-portal *::after {
+  box-sizing: border-box; margin: 0; padding: 0;
+}
+
+#pcm-portal {
+  --blue:    #1E40AF; --blue-lt: #4169E8; --blue-gl: rgba(30,64,175,.10);
+  --teal:    #00D4AA; --teal-gl: rgba(0,212,170,.08);
+  --gold:    #FFBA08; --gold-gl: rgba(255,186,8,.10);
+  --red:     #EF4444; --green:   #00C97A; --stripe: #635BFF;
+  --dark:    #02050A; --ink:     #0A0F1E; --ink2: #111827; --ink3: #1F2A3C;
+  --white:   #FFFFFF; --off:     #F4F6FB; --border: #E2E8F0;
+  --muted:   #5A6580; --tiny:    #8C97B2;
+  --mono:    'JetBrains Mono', monospace;
+  --sans:    'DM Sans', sans-serif;
+  --display: 'Bebas Neue', sans-serif;
+  font-family: var(--sans);
+  width: 100%; max-width: 560px; margin: 0 auto; background: transparent;
+}
+
+/* ── ANIMATIONS ─────────────────────────────────────────────────────────────── */
+@keyframes shimmer  { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+@keyframes spin     { to { transform: rotate(360deg); } }
+@keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:.4} }
+@keyframes fadeUp   { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+/* ── SHARED CARD BASE ───────────────────────────────────────────────────────── */
+.pp-card {
+  background: var(--white); border-radius: 20px; padding: 48px 44px;
+  box-shadow: 0 12px 40px rgba(10,15,30,.09); border: 1px solid var(--border);
+  position: relative; overflow: hidden; animation: fadeUp .35s ease;
+}
+.pp-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--blue), var(--teal), var(--gold));
+  background-size: 200% 100%; animation: shimmer 3s linear infinite;
+}
+
+/* ── BRAND HEADER ───────────────────────────────────────────────────────────── */
+.pp-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+.pp-brand-icon {
+  width: 44px; height: 44px; background: var(--blue); border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0; box-shadow: 0 4px 16px rgba(30,64,175,.30);
+}
+.pp-brand-text h2 { font-family: var(--display); font-size: 24px; letter-spacing: 1.5px; color: var(--ink); line-height: 1; }
+.pp-brand-text p  { font-size: 12px; color: var(--muted); margin-top: 3px; font-weight: 500; }
+
+/* ── FORM FIELDS ────────────────────────────────────────────────────────────── */
+.pp-form-head { margin-bottom: 24px; }
+.pp-form-head h3 { font-family: var(--display); font-size: 34px; letter-spacing: 1px; color: var(--ink); line-height: 1.1; }
+.pp-form-head p  { font-size: 14px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+.pp-field { margin-bottom: 14px; }
+.pp-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.pp-row .pp-field { margin-bottom: 0; }
+
+.pp-lbl { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin-bottom: 6px; }
+.pp-inp, .pp-sel {
+  width: 100%; padding: 13px 16px; border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 14px; font-family: var(--sans); color: var(--ink); background: var(--white);
+  outline: none; transition: border-color .2s, box-shadow .2s; appearance: none;
+}
+.pp-inp:focus, .pp-sel:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-gl); }
+.pp-inp.err, .pp-sel.err     { border-color: var(--red); }
+.pp-ferr { display: none; font-size: 11px; color: var(--red); margin-top: 4px; }
+.pp-ferr.on { display: block; }
+
+/* ── BUTTONS ────────────────────────────────────────────────────────────────── */
+.pp-btn {
+  width: 100%; padding: 16px; background: var(--blue); color: #fff; border: none;
+  border-radius: 12px; font-family: var(--display); font-size: 22px; letter-spacing: 1.5px;
+  cursor: pointer; box-shadow: 0 8px 24px rgba(30,64,175,.28); transition: all .15s;
+  margin-bottom: 10px; position: relative;
+}
+.pp-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(30,64,175,.35); }
+.pp-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+.pp-btn .spin-el { display: none; width: 20px; height: 20px; border: 2.5px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto; }
+.pp-btn.loading .lbl-el { display: none; } .pp-btn.loading .spin-el { display: block; }
+
+.pp-btn-outline {
+  width: 100%; padding: 14px; background: transparent; color: var(--blue);
+  border: 1.5px solid var(--blue); border-radius: 12px; font-family: var(--sans);
+  font-size: 14px; font-weight: 700; cursor: pointer; transition: all .2s; margin-bottom: 10px;
+}
+.pp-btn-outline:hover { background: var(--blue-gl); }
+
+.pp-link { text-align: center; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.pp-link span { color: var(--blue); cursor: pointer; font-weight: 600; text-decoration: underline; }
+
+/* ── PROGRESS BAR ───────────────────────────────────────────────────────────── */
+.pp-progress { height: 3px; background: var(--border); border-radius: 3px; margin-bottom: 24px; }
+.pp-progress-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--teal)); border-radius: 3px; width: 0%; transition: width .5s ease; }
+
+/* ── SECTION DIVIDER ────────────────────────────────────────────────────────── */
+.pp-section-ttl {
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--muted); margin: 20px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ── VERTICAL BUTTONS ───────────────────────────────────────────────────────── */
+.pp-vert-group { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.pp-vert-btn {
+  flex: 1; min-width: 110px; padding: 12px 8px; border: 1.5px solid var(--border);
+  border-radius: 10px; background: var(--white); cursor: pointer; font-family: var(--sans);
+  font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; transition: all .2s;
+}
+.pp-vert-btn:hover { border-color: var(--blue); color: var(--blue); }
+.pp-vert-btn.on    { border-color: var(--blue); background: var(--blue-gl); color: var(--blue); }
+.pp-vert-btn .vi   { display: block; font-size: 18px; margin-bottom: 4px; }
+
+.pp-medicare-warn {
+  font-size: 11px; color: #D97706; background: #FFFBEB; border: 1px solid #FDE68A;
+  border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; display: none; line-height: 1.5;
+}
+.pp-medicare-warn.on { display: block; }
+
+/* ── STATE CHIPS ────────────────────────────────────────────────────────────── */
+.pp-states-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 14px;
+}
+.pp-state-chip {
+  padding: 6px 4px; border: 1.5px solid var(--border); border-radius: 6px; text-align: center;
+  font-size: 11px; font-weight: 700; color: var(--muted); cursor: pointer; transition: all .2s;
+  font-family: var(--mono); background: var(--white);
+}
+.pp-state-chip:hover { border-color: var(--blue); color: var(--blue); }
+.pp-state-chip.on    { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+/* ── STRIPE VAULT ───────────────────────────────────────────────────────────── */
+.pp-vault {
+  background: var(--off); border: 1px solid var(--border); border-radius: 12px;
+  padding: 22px; margin-bottom: 16px; text-align: center;
+}
+.pp-vault h4 { font-size: 14px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
+.pp-vault p  { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 14px; }
+.pp-vault p strong { color: var(--ink); }
+
+.pp-stripe-btn {
+  background: var(--stripe); color: #fff; border: none; padding: 13px 20px; width: 100%;
+  border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer;
+  transition: background .2s; font-family: var(--sans); display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.pp-stripe-btn:hover { background: #524AD9; }
+.pp-stripe-btn:disabled { opacity: .6; cursor: not-allowed; }
+.pp-stripe-ok { display: none; color: var(--green); font-weight: 700; font-size: 13px; margin-top: 10px; padding: 10px; background: rgba(0,201,122,.08); border-radius: 8px; border: 1px solid rgba(0,201,122,.2); }
+
+/* BALANCE FIELDS */
+.pp-balance-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.pp-dollar-wrap { position: relative; }
+.pp-dollar-wrap::before { content: '$'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--gold); font-weight: 700; font-family: var(--mono); font-size: 14px; pointer-events: none; }
+.pp-dollar-inp { padding-left: 28px !important; font-family: var(--mono) !important; font-weight: 700 !important; }
+
+/* PRICING CARDS */
+.pp-pricing-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.pp-price-card { background: var(--blue-gl); border: 1px solid rgba(30,64,175,.12); border-radius: 8px; padding: 10px 12px; font-size: 12px; display: none; }
+.pp-price-card.on { display: block; }
+.pp-price-lbl { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+.pp-price-val { color: var(--blue); font-weight: 800; font-family: var(--mono); font-size: 14px; }
+.pp-price-soon { color: var(--tiny); font-size: 12px; font-family: var(--mono); }
+
+/* ── CHECKBOXES ─────────────────────────────────────────────────────────────── */
+.pp-chk-row { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; margin-bottom: 12px; }
+.pp-chk-row input[type=checkbox] {
+  appearance: none; width: 20px; height: 20px; min-width: 20px; border: 1.5px solid var(--border);
+  border-radius: 5px; cursor: pointer; position: relative; margin-top: 1px; flex-shrink: 0; background: #fff;
+}
+.pp-chk-row input[type=checkbox]:checked { background: var(--blue); border-color: var(--blue); }
+.pp-chk-row input[type=checkbox]:checked::after {
+  content: ''; position: absolute; left: 4px; top: 1px; width: 6px; height: 10px;
+  border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg);
+}
+.pp-chk-row input[type=checkbox].err { border-color: var(--red); }
+.pp-chk-txt { font-size: 12px; color: #475569; line-height: 1.7; }
+.pp-chk-txt strong { color: var(--ink); }
+
+/* ── SUBMIT BUTTON ──────────────────────────────────────────────────────────── */
+.pp-submit {
+  width: 100%; padding: 18px; background: var(--ink); color: var(--gold);
+  border: 2px solid var(--gold); border-radius: 12px; font-weight: 900; font-size: 16px;
+  cursor: pointer; transition: all .25s; font-family: var(--sans); letter-spacing: .5px; position: relative;
+}
+.pp-submit:hover:not(:disabled) { background: var(--gold); color: #000; }
+.pp-submit:disabled { opacity: .6; cursor: not-allowed; }
+.pp-submit .lbl-el { display: block; }
+.pp-submit .spin-el { display: none; width: 20px; height: 20px; border: 2.5px solid rgba(255,186,8,.3); border-top-color: var(--gold); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto; }
+.pp-submit.loading .lbl-el { display: none; } .pp-submit.loading .spin-el { display: block; }
+
+/* ── SUCCESS SCREEN ─────────────────────────────────────────────────────────── */
+.pp-success-icon { width: 64px; height: 64px; background: linear-gradient(135deg, var(--blue), var(--teal)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 20px; }
+.pp-creds-box { background: var(--ink); border-radius: 12px; padding: 20px 24px; text-align: left; margin-bottom: 16px; }
+.pp-creds-box h4 { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #4B5A75; margin-bottom: 14px; font-family: var(--mono); }
+.pp-cred-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-family: var(--mono); }
+.pp-cred-row:last-child { border-bottom: none; }
+.pp-cred-lbl { font-size: 11px; color: #4B5A75; }
+.pp-cred-val { font-size: 13px; color: var(--gold); font-weight: 700; }
+.pp-pending { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 14px 16px; font-size: 12px; color: #92400E; line-height: 1.6; }
+
+/* ── DASHBOARD ──────────────────────────────────────────────────────────────── */
+.dash-hdr {
+  background: var(--ink); border-radius: 18px; padding: 26px 30px; margin-bottom: 14px;
+  border: 1px solid var(--ink3); position: relative; overflow: hidden;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.dash-hdr::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--blue), var(--teal), var(--gold)); background-size: 200% 100%; animation: shimmer 3s linear infinite; }
+.dash-name { font-family: var(--display); font-size: 26px; letter-spacing: 2px; color: var(--gold); line-height: 1; }
+.dash-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+.dash-status-badge { display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 20px; font-family: var(--mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+.s-active  { background: rgba(0,201,122,.1); border: 1px solid rgba(0,201,122,.3); color: var(--green); }
+.s-pending { background: rgba(255,186,8,.1);  border: 1px solid rgba(255,186,8,.3);  color: var(--gold); }
+.s-paused  { background: rgba(90,101,128,.1); border: 1px solid rgba(90,101,128,.3); color: var(--muted); }
+.s-dot { width: 7px; height: 7px; border-radius: 50%; animation: pulse 1.5s ease-in-out infinite; }
+.s-active .s-dot { background: var(--green); } .s-pending .s-dot { background: var(--gold); } .s-paused .s-dot { background: var(--muted); animation: none; }
+
+/* KPI GRID */
+.kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
+.kpi-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; box-shadow: 0 2px 8px rgba(10,15,30,.05); position: relative; overflow: hidden; }
+.kpi-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; }
+.kk-bal::after { background: var(--green); } .kk-leads::after { background: var(--blue); }
+.kk-spend::after { background: var(--gold); } .kk-cap::after { background: var(--teal); }
+.kpi-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 5px; }
+.kpi-val { font-family: var(--display); font-size: 36px; color: var(--ink); line-height: 1; }
+.kk-bal .kpi-val { color: var(--green); }
+.kpi-sub { font-family: var(--mono); font-size: 10px; color: var(--tiny); margin-top: 3px; }
+
+/* DASH SECTION CARDS */
+.d-card { background: var(--white); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(10,15,30,.05); }
+.d-card-ttl { font-family: var(--display); font-size: 17px; letter-spacing: 1px; color: var(--ink); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+
+/* ADD FUNDS */
+.funds-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.funds-wrap { position: relative; }
+.funds-wrap::before { content: '$'; position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--green); font-weight: 700; font-family: var(--mono); font-size: 14px; pointer-events: none; }
+.funds-inp { padding-left: 26px !important; font-family: var(--mono) !important; font-weight: 700 !important; }
+.funds-btn { padding: 0 20px; background: var(--green); color: #fff; border: none; border-radius: 10px; font-family: var(--display); font-size: 18px; letter-spacing: 1px; cursor: pointer; transition: all .15s; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,201,122,.25); }
+.funds-btn:hover { transform: translateY(-1px); }
+.funds-btn:disabled { opacity: .5; cursor: not-allowed; }
+.funds-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+/* TOGGLES */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--off); }
+.toggle-lbl { font-size: 13px; color: var(--ink); font-weight: 500; }
+.toggle-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.tgl { position: relative; width: 46px; height: 25px; }
+.tgl input { opacity: 0; width: 0; height: 0; position: absolute; }
+.tgl-sl { position: absolute; inset: 0; cursor: pointer; background: var(--border); border-radius: 25px; transition: .3s; }
+.tgl-sl::before { content: ''; position: absolute; width: 19px; height: 19px; border-radius: 50%; left: 3px; top: 3px; background: #fff; transition: .3s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.tgl input:checked + .tgl-sl { background: var(--green); }
+.tgl input:checked + .tgl-sl::before { transform: translateX(21px); }
+
+/* CAP */
+.cap-row { display: flex; align-items: center; gap: 10px; }
+.cap-inp { width: 90px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-family: var(--mono); font-weight: 700; font-size: 15px; color: var(--ink); text-align: center; outline: none; transition: border-color .2s; appearance: none; }
+.cap-inp:focus { border-color: var(--blue); }
+.cap-save { padding: 10px 18px; background: var(--blue); color: #fff; border: none; border-radius: 8px; font-family: var(--mono); font-size: 11px; font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: .5px; transition: all .15s; }
+.cap-save:hover { background: var(--blue-lt); }
+.cap-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+/* LEAD HISTORY */
+.lead-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--off); font-size: 12px; }
+.lead-row:last-child { border-bottom: none; }
+.lead-date { font-family: var(--mono); font-size: 10px; color: var(--tiny); }
+.lead-state { font-weight: 700; color: var(--ink); }
+.lead-vert { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+.lv-u65  { background: var(--blue-gl); color: var(--blue); }
+.lv-med  { background: var(--teal-gl); color: var(--teal); }
+.lv-life { background: var(--gold-gl); color: #92600A; }
+.lv-fe   { background: rgba(90,101,128,.1); color: var(--muted); }
+.lead-ok { font-size: 11px; color: var(--green); font-weight: 700; }
+
+/* INFO ROWS */
+.info-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--off); font-size: 13px; }
+.info-row:last-child { border-bottom: none; }
+.info-lbl { color: var(--muted); font-weight: 500; }
+.info-val { font-family: var(--mono); color: var(--ink); font-weight: 700; font-size: 11px; text-align: right; max-width: 60%; word-break: break-all; }
+
+/* SUPPORT BUTTONS */
+.sup-btn { width: 100%; padding: 13px; background: transparent; border: 1.5px solid var(--border); border-radius: 10px; font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; transition: all .2s; margin-bottom: 8px; }
+.sup-btn:hover { border-color: var(--blue); color: var(--blue); }
+.logout-btn { width: 100%; padding: 12px; background: transparent; border: 1.5px solid var(--border); border-radius: 10px; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--muted); cursor: pointer; transition: all .2s; text-transform: uppercase; letter-spacing: .5px; }
+.logout-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* TOAST */
+#pp-toast { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 12px 24px; border-radius: 10px; font-family: var(--mono); font-size: 12px; z-index: 9999; border: 1px solid var(--teal); box-shadow: 0 8px 24px rgba(0,0,0,.3); white-space: nowrap; }
+
+/* ERROR MSG */
+.pp-err-banner { display: none; font-size: 12px; color: var(--red); text-align: center; margin-top: 8px; padding: 10px; background: rgba(239,68,68,.06); border-radius: 8px; border: 1px solid rgba(239,68,68,.2); }
+.pp-err-banner.on { display: block; }
+
+/* MOBILE */
+@media (max-width: 520px) {
+  .pp-card        { padding: 32px 22px; }
+  .pp-row         { grid-template-columns: 1fr; }
+  .pp-states-grid { grid-template-columns: repeat(4, 1fr); }
+  .pp-vert-group  { flex-direction: column; }
+  .pp-balance-row { grid-template-columns: 1fr; }
+  .kpi-grid       { grid-template-columns: 1fr; }
+  .dash-hdr       { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .pp-pricing-row { grid-template-columns: 1fr; }
+  #pp-toast       { width: 90%; text-align: center; white-space: normal; }
+}
+</style>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div id="pcm-portal">
+
+  <!-- ── VIEW A — LANDING ────────────────────────────────────────────────── -->
+  <div id="vA" class="pp-card">
+    <div class="pp-brand">
+      <div class="pp-brand-icon">🛡️</div>
+      <div class="pp-brand-text">
+        <h2>PRO CAPITAL DATA</h2>
+        <p>A Division of Pro Capital Management LLC</p>
+      </div>
+    </div>
+    <div class="pp-form-head">
+      <h3>Partner Portal</h3>
+      <p>New partner or returning agency — everything you need is here.</p>
+    </div>
+    <button class="pp-btn" onclick="showView('vB')">
+      <span class="lbl-el">🆕 ENROLL AS NEW PARTNER</span>
+      <div class="spin-el"></div>
+    </button>
+    <button class="pp-btn-outline" onclick="showView('vC')">🔑 RETURNING AGENCY LOGIN</button>
+    <div class="pp-link" style="margin-top:16px; font-size:12px; color:var(--muted);">Secure portal powered by Pro Capital Management LLC · All transactions encrypted via Stripe</div>
+  </div>
+
+  <!-- ── VIEW B — ENROLLMENT ─────────────────────────────────────────────── -->
+  <div id="vB" style="display:none;">
+    <div class="pp-card">
+      <div class="pp-brand">
+        <div class="pp-brand-icon">🛡️</div>
+        <div class="pp-brand-text">
+          <h2>PRO CAPITAL DATA</h2>
+          <p>Partner Floor Enrollment</p>
+        </div>
+      </div>
+
+      <div class="pp-progress"><div class="pp-progress-fill" id="enroll-prog"></div></div>
+
+      <!-- HONEYPOT -->
+      <input type="text" id="pp-trap" style="display:none;position:absolute;left:-9999px;" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+      <!-- 01 OFFICE INFO -->
+      <div class="pp-section-ttl"><span>01</span> Floor / Office Information</div>
+
+      <div class="pp-field">
+        <label class="pp-lbl">Floor / Agency Name</label>
+        <input type="text" class="pp-inp" id="e-floor-name" placeholder="e.g. Florida Central Health Group">
+        <div class="pp-ferr" id="fe-floor-name">Floor name is required.</div>
+      </div>
+
+      <div class="pp-row">
+        <div class="pp-field">
+          <label class="pp-lbl">Primary Contact Name</label>
+          <input type="text" class="pp-inp" id="e-contact" placeholder="Full name">
+          <div class="pp-ferr" id="fe-contact">Contact name required.</div>
+        </div>
+        <div class="pp-field">
+          <label class="pp-lbl">Title / Role</label>
+          <input type="text" class="pp-inp" id="e-title" placeholder="e.g. Agency Owner">
+        </div>
+      </div>
+
+      <div class="pp-row">
+        <div class="pp-field">
+          <label class="pp-lbl">Business Email</label>
+          <input type="email" class="pp-inp" id="e-email" placeholder="contact@agency.com">
+          <div class="pp-ferr" id="fe-email">Valid email required.</div>
+        </div>
+        <div class="pp-field">
+          <label class="pp-lbl">Business Phone</label>
+          <input type="tel" class="pp-inp" id="e-phone" placeholder="(555) 000-0000" maxlength="14">
+          <div class="pp-ferr" id="fe-phone">Valid 10-digit phone required.</div>
+        </div>
+      </div>
+
+      <!-- 02 VERTICAL -->
+      <div class="pp-section-ttl"><span>02</span> Insurance Vertical</div>
+      <div class="pp-vert-group" id="pp-vert-group">
+        <button type="button" class="pp-vert-btn" data-v="U65_ACA"  onclick="selVert(this)"><span class="vi">🏥</span>U65 / ACA Health</button>
+        <button type="button" class="pp-vert-btn" data-v="MEDICARE" onclick="selVert(this)"><span class="vi">🩺</span>Medicare (65+)</button>
+        <button type="button" class="pp-vert-btn" data-v="LIFE"     onclick="selVert(this)"><span class="vi">🛡️</span>Life Insurance</button>
+        <button type="button" class="pp-vert-btn" data-v="ALL"      onclick="selVert(this)"><span class="vi">⚡</span>All Verticals</button>
+      </div>
+      <div class="pp-medicare-warn" id="med-warn">⚠️ <strong>Medicare TPMO Requirement:</strong> Your agency must hold active FMO/IMO agreements and be licensed in your assigned states. By enrolling for Medicare you confirm your TPMO compliance status.</div>
+      <input type="hidden" id="e-vertical">
+      <div class="pp-ferr" id="fe-vert">Please select a vertical.</div>
+
+      <!-- PRICING -->
+      <div id="pp-pricing" style="display:none; margin-bottom:14px;">
+        <div class="pp-pricing-row">
+          <div class="pp-price-card" id="pr-u65">  <div class="pp-price-lbl">U65 Aged 14-Day</div><div class="pp-price-val">$12.00</div></div>
+          <div class="pp-price-card" id="pr-u65b"> <div class="pp-price-lbl">U65 Aged 3-Day</div><div class="pp-price-val">$22.00</div></div>
+          <div class="pp-price-card" id="pr-med">  <div class="pp-price-lbl">Medicare Aged 7-Day</div><div class="pp-price-val">$42.00</div></div>
+          <div class="pp-price-card" id="pr-life"> <div class="pp-price-lbl">Life Aged Lead</div><div class="pp-price-val">$20.00</div></div>
+          <div class="pp-price-card on" id="pr-xfer" style="border-color:rgba(90,101,128,.15); background:rgba(90,101,128,.04);"><div class="pp-price-lbl">Live Transfer</div><div class="pp-price-soon">Coming Soon</div></div>
+        </div>
+      </div>
+
+      <!-- 03 STATES -->
+      <div class="pp-section-ttl"><span>03</span> Licensed States</div>
+      <div class="pp-states-grid" id="states-grid"></div>
+      <input type="hidden" id="e-states">
+      <div class="pp-ferr" id="fe-states">Select at least one state.</div>
+
+      <!-- 04 BILLING -->
+      <div class="pp-section-ttl"><span>04</span> Secure Billing Setup</div>
+      <div class="pp-vault">
+        <h4>💳 Payment Authorization</h4>
+        <p>Enrollment authorizes <strong>Pro Capital Management LLC</strong> to facilitate lead delivery charges. All charges appear as <strong>"PRO CAPITAL MGMT LLC"</strong>. Processed securely via Stripe.</p>
+        <button type="button" class="pp-stripe-btn" id="stripe-connect-btn" onclick="initStripe()">🔐 CONNECT PAYMENT METHOD VIA STRIPE</button>
+        <div class="pp-stripe-ok" id="stripe-ok">✅ Payment method connected securely. Stripe Customer record created.</div>
+        <input type="hidden" id="e-stripe-id">
+
+        <div class="pp-balance-row">
+          <div class="pp-field">
+            <label class="pp-lbl">Initial Prepay ($)</label>
+            <div class="pp-dollar-wrap">
+              <input type="number" class="pp-inp pp-dollar-inp" id="e-prepay" placeholder="500" min="100" step="50">
+            </div>
+            <div class="pp-ferr" id="fe-prepay">Minimum prepay is $100.</div>
+          </div>
+          <div class="pp-field">
+            <label class="pp-lbl">Daily Lead Cap</label>
+            <input type="number" class="pp-inp" id="e-daily-cap" placeholder="50" min="1" max="500">
+          </div>
+        </div>
+      </div>
+
+      <!-- 05 AGREEMENTS -->
+      <div class="pp-section-ttl"><span>05</span> Agreements &amp; Compliance</div>
+
+      <label class="pp-chk-row">
+        <input type="checkbox" id="chk-p12">
+        <span class="pp-chk-txt">I agree to the <strong>Lead Return Protocol (P12)</strong>: Returns accepted within 72 hours for disconnected numbers only. All disputes managed via Commander Portal.</span>
+      </label>
+      <div class="pp-ferr" id="fe-p12">This agreement is required.</div>
+
+      <label class="pp-chk-row">
+        <input type="checkbox" id="chk-p13">
+        <span class="pp-chk-txt">I agree to the <strong>Auto Top-Up Protocol (P13)</strong>: When balance drops below $100, card on file automatically refills to restore selected prepay balance.</span>
+      </label>
+      <div class="pp-ferr" id="fe-p13">This agreement is required.</div>
+
+      <label class="pp-chk-row">
+        <input type="checkbox" id="chk-tcpa">
+        <span class="pp-chk-txt">I confirm all leads will be contacted in compliance with TCPA, state regulations, and the DNC list. Platform compliance includes integrated TrustedForm and Litigator checks.</span>
+      </label>
+      <div class="pp-ferr" id="fe-tcpa">TCPA compliance confirmation required.</div>
+
+      <label class="pp-chk-row" id="tpmo-row" style="display:none;">
+        <input type="checkbox" id="chk-tpmo">
+        <span class="pp-chk-txt"><strong>Medicare TPMO Acknowledgment:</strong> I confirm active FMO/IMO agreements, proper state licensing, CMS TPMO disclosure execution, and 6-year call recording retention.</span>
+      </label>
+      <div class="pp-ferr" id="fe-tpmo"></div>
+
+      <button class="pp-submit" id="enroll-btn" onclick="submitEnroll()">
+        <span class="lbl-el">INITIALIZE DATA FLOW</span>
+        <div class="spin-el"></div>
+      </button>
+
+      <div class="pp-link" style="margin-top:12px;"><span onclick="showView('vA')">← Back to portal</span></div>
+    </div>
+
+    <!-- ENROLLMENT SUCCESS -->
+    <div id="vB-success" style="display:none;" class="pp-card">
+      <div class="pp-success-icon">✅</div>
+      <h3 style="font-family:var(--display);font-size:32px;letter-spacing:1px;color:var(--ink);text-align:center;margin-bottom:8px;">Enrollment Submitted</h3>
+      <p style="text-align:center;font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px;">Save your credentials below to access the billing portal.</p>
+      <div class="pp-creds-box">
+        <h4>Your Portal Credentials</h4>
+        <div class="pp-cred-row"><span class="pp-cred-lbl">Agency ID</span><span class="pp-cred-val" id="sc-id">—</span></div>
+        <div class="pp-cred-row"><span class="pp-cred-lbl">Agency PIN</span><span class="pp-cred-val" id="sc-pin">—</span></div>
+        <div class="pp-cred-row"><span class="pp-cred-lbl">Portal URL</span><span class="pp-cred-val" style="font-size:11px;">procapitaldata.com/portal</span></div>
+        <div class="pp-cred-row"><span class="pp-cred-lbl">Vertical</span><span class="pp-cred-val" id="sc-vert">—</span></div>
+        <div class="pp-cred-row"><span class="pp-cred-lbl">Assigned States</span><span class="pp-cred-val" id="sc-states" style="font-size:11px;">—</span></div>
+        <div class="pp-cred-row"><span class="pp-cred-lbl">Opening Balance</span><span class="pp-cred-val" id="sc-balance">—</span></div>
+      </div>
+      <div class="pp-pending">⏳ <strong>Status: Pending Activation</strong><br>Your enrollment has been logged. Account activates upon validation review in the Sovereign Dashboard.</div>
+      <div class="pp-pending" style="margin-top:10px; background:#FEF2F2; border-color:#FECACA; color:#991B1B;">🔒 <strong>Important:</strong> Save your Agency PIN now — it is shown only once and cannot be recovered later. If lost, contact support for a reset.</div>
+      <button class="pp-btn-outline" style="margin-top:16px;" onclick="showView('vC')">→ Go to Billing Portal Login</button>
+    </div>
+  </div>
+
+  <!-- ── VIEW C — BILLING LOGIN ───────────────────────────────────────────── -->
+  <div id="vC" style="display:none;">
+    <div class="pp-card" id="vC-login">
+      <div class="pp-brand">
+        <div class="pp-brand-icon">🛡️</div>
+        <div class="pp-brand-text">
+          <h2>PRO CAPITAL DATA</h2>
+          <p>Agency Billing Portal</p>
+        </div>
+      </div>
+      <div class="pp-form-head">
+        <h3>Agency Login</h3>
+        <p>Enter your Agency ID and PIN to access your billing dashboard.</p>
+      </div>
+      <div class="pp-field">
+        <label class="pp-lbl">Agency ID</label>
+        <input type="text" class="pp-inp" id="login-id" placeholder="PCM-0000" maxlength="8" style="text-transform:uppercase;">
+      </div>
+      <div class="pp-field">
+        <label class="pp-lbl">Agency PIN</label>
+        <input type="password" class="pp-inp" id="login-pin" placeholder="••••••" maxlength="6" onkeydown="if(event.key==='Enter') doLogin()">
+      </div>
+      <button class="pp-btn" id="login-btn" onclick="doLogin()">
+        <span class="lbl-el">ACCESS PORTAL</span>
+        <div class="spin-el"></div>
+      </button>
+      <div class="pp-err-banner" id="login-err">Invalid Agency ID or PIN. Please try again.</div>
+      <div class="pp-link" style="margin-top:12px;"><span onclick="showView('vA')">← Back</span></div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="vC-dash" style="display:none; animation: fadeUp .35s ease;">
+
+      <div class="dash-hdr">
+        <div>
+          <div class="dash-name" id="d-name">—</div>
+          <div class="dash-meta" id="d-meta">—</div>
+        </div>
+        <div class="dash-status-badge s-pending" id="d-status-badge">
+          <div class="s-dot"></div>
+          <span id="d-status-txt">Loading</span>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid">
+        <div class="kpi-card kk-bal">
+          <div class="kpi-lbl">Current Balance</div>
+          <div class="kpi-val" id="k-bal">$—</div>
+          <div class="kpi-sub" id="k-bal-sub">—</div>
+        </div>
+        <div class="kpi-card kk-leads">
+          <div class="kpi-lbl">Leads Today</div>
+          <div class="kpi-val" id="k-today">—</div>
+          <div class="kpi-sub" id="k-month">— this month</div>
+        </div>
+        <div class="kpi-card kk-spend">
+          <div class="kpi-lbl">Spend This Month</div>
+          <div class="kpi-val" id="k-spend">$—</div>
+          <div class="kpi-sub" id="k-total">— total delivered</div>
+        </div>
+        <div class="kpi-card kk-cap">
+          <div class="kpi-lbl">Daily Lead Cap</div>
+          <div class="kpi-val" id="k-cap">—</div>
+          <div class="kpi-sub">leads per day max</div>
+        </div>
+      </div>
+
+      <!-- BALANCE MANAGEMENT -->
+      <div class="d-card">
+        <div class="d-card-ttl">💳 Balance Management</div>
+        <div class="funds-row">
+          <div class="funds-wrap">
+            <input type="number" class="pp-inp funds-inp" id="d-funds" placeholder="500" min="100" step="50">
+          </div>
+          <button class="funds-btn" id="d-funds-btn" onclick="addFunds()">ADD FUNDS</button>
+        </div>
+        <div class="funds-hint">Minimum top-up $100 · Charged to card on file via Stripe</div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-lbl">Auto Top-Up — P13 Protocol</div>
+            <div class="toggle-sub">Refills when balance drops below $100</div>
+          </div>
+          <label class="tgl">
+            <input type="checkbox" id="d-topup-toggle" onchange="toggleAutoTopup(this.checked)">
+            <span class="tgl-sl"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-lbl">Pause Lead Delivery</div>
+            <div class="toggle-sub">Temporarily stop leads to your floor</div>
+          </div>
+          <label class="tgl">
+            <input type="checkbox" id="d-pause-toggle" onchange="togglePause(this.checked)">
+            <span class="tgl-sl"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- DAILY CAP -->
+      <div class="d-card">
+        <div class="d-card-ttl">⚡ Daily Lead Cap Control</div>
+        <div class="cap-row">
+          <input type="number" class="cap-inp" id="d-cap-inp" placeholder="50" min="1" max="500">
+          <button class="cap-save" onclick="saveCap()">Save Cap</button>
+        </div>
+        <div class="cap-hint">Changes take effect immediately. Range: 1–500 leads per day.</div>
+      </div>
+
+      <!-- LEAD HISTORY -->
+      <div class="d-card">
+        <div class="d-card-ttl">📋 Recent Lead Deliveries</div>
+        <div id="d-leads-list">
+          <div style="text-align:center;color:var(--muted);font-size:13px;padding:16px;">Loading...</div>
+        </div>
+      </div>
+
+      <!-- ACCOUNT INFO -->
+      <div class="d-card">
+        <div class="d-card-ttl">🏢 Account Information</div>
+        <div class="info-row"><span class="info-lbl">Agency ID</span><span class="info-val" id="d-info-id">—</span></div>
+        <div class="info-row"><span class="info-lbl">Contact</span><span class="info-val" id="d-info-contact">—</span></div>
+        <div class="info-row"><span class="info-lbl">Email</span><span class="info-val" id="d-info-email">—</span></div>
+        <div class="info-row"><span class="info-lbl">Vertical</span><span class="info-val" id="d-info-vert">—</span></div>
+        <div class="info-row"><span class="info-lbl">Licensed States</span><span class="info-val" id="d-info-states">—</span></div>
+        <div class="info-row"><span class="info-lbl">Enrolled</span><span class="info-val" id="d-info-enrolled">—</span></div>
+        <div class="info-row"><span class="info-lbl">Payment Method</span><span class="info-val">Card on file via Stripe ✓</span></div>
+      </div>
+
+      <!-- SUPPORT -->
+      <div class="d-card">
+        <div class="d-card-ttl">🔧 Support</div>
+        <button class="sup-btn" onclick="submitDispute()">📩 Submit Lead Return Request — P12 Protocol (72hr window)</button>
+        <button class="logout-btn" onclick="doLogout()">⎋ LOGOUT</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="pp-toast"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+'use strict';
+
+/* ── SUPABASE INIT — replaces Firebase ───────────────────────────────────── */
+const SUPABASE_URL = "https://soyavidxbcxmifwnshhh.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_MBr27IBzEDWbvWOEwr8xTg_rKfRkPfR"; // safe to expose — publishable key only
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const WH_ENROLL  = 'https://hook.us2.make.com/x006x8eypfk03nqrmrw62y0a8b9imlvt';
+const WH_BILLING = 'https://hook.us2.make.com/98k96e6hvfcik78t1s8ddkp6xm2nxstm';
+const STATES_15  = ['FL','TX','GA','NC','VA','TN','AZ','NV','SC','CO','MI','PA','IL','IN','OH'];
+
+/* ── SHA-256 HELPER — used for hashing the agency PIN before storage ────── */
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+/* ── STATE ────────────────────────────────────────────────────────────────── */
+let ES = { vertical:'', states:[], stripeLinked:false, stripeId:'', submitting:false };
+let currentAgency = null;
+
+/* ── VIEW MANAGER ─────────────────────────────────────────────────────────── */
+function showView(id) {
+  ['vA','vB','vC'].forEach(v => {
+    const el = document.getElementById(v);
+    if (el) el.style.display = (v === id) ? 'block' : 'none';
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── BUILD STATE CHIPS ────────────────────────────────────────────────────── */
+(function buildStates(){
+  const g = document.getElementById('states-grid');
+  if (!g) return;
+  g.innerHTML = STATES_15.map(s =>
+    `<div class="pp-state-chip" data-s="${s}" onclick="toggleState(this)">${s}</div>`
+  ).join('');
+})();
+
+/* ── PHONE FORMATTING ─────────────────────────────────────────────────────── */
+const ph = document.getElementById('e-phone');
+if (ph) ph.addEventListener('input', function(){
+  let d = this.value.replace(/\D/g,'').slice(0,10);
+  if (d.length >= 7)      d = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+  else if (d.length >= 4) d = '(' + d.slice(0,3) + ') ' + d.slice(3);
+  else if (d.length >= 1) d = '(' + d;
+  this.value = d;
+});
+
+/* ── VERTICAL SELECTION ───────────────────────────────────────────────────── */
+function selVert(btn) {
+  document.querySelectorAll('#pp-vert-group .pp-vert-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  ES.vertical = btn.getAttribute('data-v');
+  document.getElementById('e-vertical').value = ES.vertical;
+  clrErr('fe-vert');
+  const isMed = ES.vertical === 'MEDICARE' || ES.vertical === 'ALL';
+  document.getElementById('med-warn').classList.toggle('on', isMed);
+  document.getElementById('tpmo-row').style.display = isMed ? 'flex' : 'none';
+  const pr = document.getElementById('pp-pricing');
+  pr.style.display = 'grid';
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.classList.toggle('on', on); };
+  show('pr-u65',  ES.vertical === 'U65_ACA'  || ES.vertical === 'ALL');
+  show('pr-u65b', ES.vertical === 'U65_ACA'  || ES.vertical === 'ALL');
+  show('pr-med',  ES.vertical === 'MEDICARE' || ES.vertical === 'ALL');
+  show('pr-life', ES.vertical === 'LIFE'     || ES.vertical === 'ALL');
+  updProg();
+}
+
+/* ── STATE TOGGLE ─────────────────────────────────────────────────────────── */
+function toggleState(chip) {
+  const s = chip.getAttribute('data-s');
+  chip.classList.toggle('on');
+  if (chip.classList.contains('on')) { if (!ES.states.includes(s)) ES.states.push(s); }
+  else { ES.states = ES.states.filter(x => x !== s); }
+  document.getElementById('e-states').value = ES.states.join(',');
+  clrErr('fe-states');
+  updProg();
+}
+
+/* ── PROGRESS BAR ─────────────────────────────────────────────────────────── */
+function updProg() {
+  let n = 0;
+  const g = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  if (g('e-floor-name') && g('e-contact')) n++;
+  if (ES.vertical) n++;
+  if (ES.states.length) n++;
+  if (ES.stripeLinked) n++;
+  const el = document.getElementById('enroll-prog');
+  if (el) el.style.width = Math.round((n/4)*100) + '%';
+}
+['e-floor-name','e-contact','e-email','e-phone'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updProg);
+});
+
+/* ── STRIPE INIT ──────────────────────────────────────────────────────────── */
+async function initStripe() {
+  const email = document.getElementById('e-email').value.trim();
+  const name  = document.getElementById('e-floor-name').value.trim();
+  const phone = document.getElementById('e-phone').value.trim();
+  if (!email || !name) { showToast('⚠ Please enter floor name and email first.'); return; }
+  const btn = document.getElementById('stripe-connect-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;vertical-align:middle;"></span>Connecting...';
+  try {
+    const res  = await fetch(WH_ENROLL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'CREATE_STRIPE_CUSTOMER', agencyName:name, email, phone, vertical:ES.vertical, states:ES.states.join(','), enrolledAt:new Date().toISOString() }) });
+    if (!res.ok) throw new Error('API ' + res.status);
+    const data = await res.json();
+    if (!data.stripeCustomerId) throw new Error('No customer token returned.');
+    ES.stripeId = data.stripeCustomerId;
+    document.getElementById('e-stripe-id').value = ES.stripeId;
+    ES.stripeLinked = true;
+    btn.style.display = 'none';
+    document.getElementById('stripe-ok').style.display = 'block';
+    updProg();
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '🔐 CONNECT PAYMENT METHOD VIA STRIPE';
+    showToast('⚠ Payment connection failed: ' + e.message);
+  }
+}
+
+/* ── ENROLLMENT VALIDATION ────────────────────────────────────────────────── */
+function validateEnroll() {
+  let ok = true; clrAllErr();
+  const g = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  if (!g('e-floor-name') || g('e-floor-name').length < 3) { showFerr('fe-floor-name','e-floor-name'); ok=false; }
+  if (!g('e-contact')    || g('e-contact').length < 2)    { showFerr('fe-contact','e-contact');       ok=false; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g('e-email')))  { showFerr('fe-email','e-email');            ok=false; }
+  if (g('e-phone').replace(/\D/g,'').length !== 10)       { showFerr('fe-phone','e-phone');            ok=false; }
+  if (!ES.vertical)     { const f = document.getElementById('fe-vert'); if(f){f.textContent='Please select a vertical.';f.classList.add('on');} ok=false; }
+  if (!ES.states.length){ const f = document.getElementById('fe-states'); if(f)f.classList.add('on'); ok=false; }
+  if (!ES.stripeLinked) { showToast('⚠ Please connect payment method via Stripe first.'); ok=false; }
+  const prepay = parseFloat(g('e-prepay'));
+  if (isNaN(prepay) || prepay < 100) { showFerr('fe-prepay','e-prepay'); ok=false; }
+  if (!document.getElementById('chk-p12').checked)  { showFerr('fe-p12','chk-p12');   ok=false; }
+  if (!document.getElementById('chk-p13').checked)  { showFerr('fe-p13','chk-p13');   ok=false; }
+  if (!document.getElementById('chk-tcpa').checked) { showFerr('fe-tcpa','chk-tcpa'); ok=false; }
+  const isMed = ES.vertical === 'MEDICARE' || ES.vertical === 'ALL';
+  if (isMed && !document.getElementById('chk-tpmo').checked) {
+    const f = document.getElementById('fe-tpmo');
+    if(f){f.textContent='TPMO acknowledgment required for Medicare enrollment.';f.classList.add('on');}
+    ok=false;
+  }
+  return ok;
+}
+
+/* ── SUBMIT ENROLLMENT ────────────────────────────────────────────────────────
+   SECURITY FIX: Agency PIN is now generated using crypto.getRandomValues()
+   instead of Math.random() (which is not cryptographically secure), and
+   only a SHA-256 HASH of the PIN is written to Supabase — never the
+   plaintext PIN. The plaintext PIN is shown to the user exactly once on
+   this success screen and then exists nowhere else. If lost, it cannot be
+   recovered — only reset by support, exactly like a real password.
+──────────────────────────────────────────────────────────────────────── */
+function generateSecurePin() {
+  // 6-digit PIN using a cryptographically secure random source
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  const pin = 100000 + (arr[0] % 900000); // maps to 100000–999999
+  return String(pin);
+}
+
+async function submitEnroll() {
+  if (document.getElementById('pp-trap').value !== '') return;
+  if (ES.submitting) return;
+  if (!validateEnroll()) return;
+  ES.submitting = true;
+  const btn = document.getElementById('enroll-btn');
+  btn.disabled = true; btn.classList.add('loading');
+  const g = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+
+  const agencyId  = 'PCM-' + (Math.floor(Math.random() * 9000) + 1000);
+  const agencyPin = generateSecurePin();          // plaintext — shown once, never stored
+  const pinHash   = await sha256Hex(agencyPin);    // hash — this is what gets stored
+  const prepay    = parseFloat(g('e-prepay')) || 0;
+
+  const agency = {
+    id: agencyId,
+    pin_hash: pinHash,                              // hash only, never plaintext
+    name: g('e-floor-name'), contact_name: g('e-contact'), contact_title: g('e-title'),
+    email: g('e-email'), phone: g('e-phone').replace(/\D/g,''),
+    vertical: ES.vertical, states: ES.states.join(','),
+    stripe_customer_id: ES.stripeId, balance: prepay, spend: 0,
+    leads_delivered: 0, leads_today: 0, leads_month: 0,
+    daily_cap: parseInt(g('e-daily-cap')) || 50, status: 'pending',
+    consent_p12: true, consent_p13: true, consent_tcpa: true,
+    consent_tpmo: ES.vertical === 'MEDICARE' || ES.vertical === 'ALL',
+    enrolled_at: new Date().toISOString()
+  };
+
+  let dbOk = false;
+  try {
+    const { error } = await sb.from('pcm_agencies').insert(agency);
+    if (!error) dbOk = true;
+    else console.warn('Supabase write error:', error.message);
+  } catch(e) { console.warn('Supabase write error:', e.message); }
+
+  try {
+    await fetch(WH_ENROLL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...agency, action:'NEW_AGENCY_ENROLLMENT', agencyId, dbWritten: dbOk }) });
+  } catch(e) { console.warn('Make.com webhook error:', e.message); }
+
+  document.getElementById('vB').querySelector('.pp-card').style.display     = 'none';
+  document.getElementById('vB-success').style.display = 'block';
+  document.getElementById('sc-id').textContent      = agencyId;
+  document.getElementById('sc-pin').textContent      = agencyPin; // shown once, plaintext, never persisted
+  document.getElementById('sc-vert').textContent    = ES.vertical.replace(/_/g,' / ');
+  document.getElementById('sc-states').textContent  = ES.states.join(' · ');
+  document.getElementById('sc-balance').textContent = '$' + prepay.toFixed(2) + ' (pending charge)';
+}
+
+/* ── LOGIN ────────────────────────────────────────────────────────────────────
+   SECURITY FIX: Compares a hash of the entered PIN against pin_hash in
+   Supabase — never compares plaintext PINs against each other.
+──────────────────────────────────────────────────────────────────────── */
+async function doLogin() {
+  const id  = document.getElementById('login-id').value.trim().toUpperCase();
+  const pin = document.getElementById('login-pin').value.trim();
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-err');
+  if (!id || !pin) { err.textContent='Please enter Agency ID and PIN.'; err.classList.add('on'); return; }
+  btn.classList.add('loading'); btn.disabled = true; err.classList.remove('on');
+
+  try {
+    const { data, error } = await sb.from('pcm_agencies').select('*').eq('id', id).single();
+    const enteredHash = await sha256Hex(pin);
+
+    if (error || !data || data.pin_hash !== enteredHash) {
+      err.textContent='Invalid Agency ID or PIN. Please try again.'; err.classList.add('on');
+      btn.classList.remove('loading'); btn.disabled = false; return;
+    }
+    currentAgency = data;
+    renderDash(data);
+    document.getElementById('vC-login').style.display = 'none';
+    document.getElementById('vC-dash').style.display  = 'block';
+  } catch(e) {
+    err.textContent='Connection error. Please try again.'; err.classList.add('on');
+    btn.classList.remove('loading'); btn.disabled = false;
+  }
+}
+
+/* ── RENDER DASHBOARD ─────────────────────────────────────────────────────── */
+function renderDash(d) {
+  document.getElementById('d-name').textContent    = d.name || 'Agency';
+  document.getElementById('d-meta').textContent    = 'ID: ' + d.id + ' · ' + (d.vertical||'').replace(/_/g,' / ');
+  const badge = document.getElementById('d-status-badge');
+  const stxt  = document.getElementById('d-status-txt');
+  if (d.status === 'active')      { badge.className = 'dash-status-badge s-active';  stxt.textContent = 'ACTIVE'; }
+  else if (d.status === 'paused') { badge.className = 'dash-status-badge s-paused';  stxt.textContent = 'PAUSED'; }
+  else                            { badge.className = 'dash-status-badge s-pending'; stxt.textContent = 'PENDING'; }
+  const bal = parseFloat(d.balance) || 0;
+  document.getElementById('k-bal').textContent     = '$' + bal.toFixed(2);
+  document.getElementById('k-bal-sub').textContent = d.consent_p13 ? 'Auto top-up ON at $100' : 'Auto top-up OFF';
+  document.getElementById('k-today').textContent   = d.leads_today  || 0;
+  document.getElementById('k-month').textContent   = (d.leads_month || 0) + ' this month';
+  document.getElementById('k-spend').textContent   = '$' + (parseFloat(d.spend) || 0).toFixed(2);
+  document.getElementById('k-total').textContent   = (d.leads_delivered || 0) + ' total delivered';
+  document.getElementById('k-cap').textContent     = d.daily_cap || 50;
+  document.getElementById('d-topup-toggle').checked = !!d.consent_p13;
+  document.getElementById('d-pause-toggle').checked  = d.status === 'paused';
+  document.getElementById('d-cap-inp').value         = d.daily_cap || 50;
+  document.getElementById('d-info-id').textContent       = d.id;
+  document.getElementById('d-info-contact').textContent  = d.contact_name || '—';
+  document.getElementById('d-info-email').textContent    = d.email || '—';
+  document.getElementById('d-info-vert').textContent     = (d.vertical||'').replace(/_/g,' / ');
+  document.getElementById('d-info-states').textContent   = (d.states||'').split(',').join(' · ');
+  document.getElementById('d-info-enrolled').textContent = d.enrolled_at ? new Date(d.enrolled_at).toLocaleDateString() : '—';
+  renderLeads(d);
+}
+
+function renderLeads(d) {
+  const box = document.getElementById('d-leads-list');
+  const leads = Array.isArray(d.lead_history) ? d.lead_history.slice(-10).reverse() : [];
+  if (!leads.length) { box.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px;">No lead deliveries yet.</div>'; return; }
+  const vertClass = v => v==='U65_ACA'?'lv-u65':v==='MEDICARE'?'lv-med':v==='LIFE'?'lv-life':'lv-fe';
+  const vertLabel = v => v==='U65_ACA'?'U65':v==='MEDICARE'?'Medicare':v==='LIFE'?'Life':'FE';
+  box.innerHTML = leads.map(l =>
+    `<div class="lead-row">
+      <span class="lead-date">${l.date||'—'}</span>
+      <span class="lead-state">${l.state||'—'}</span>
+      <span class="lead-vert ${vertClass(l.vertical)}">${vertLabel(l.vertical)}</span>
+      <span class="lead-ok">✓ Delivered</span>
+    </div>`
+  ).join('');
+}
+
+/* ── ADD FUNDS ────────────────────────────────────────────────────────────── */
+async function addFunds() {
+  const amount = parseFloat(document.getElementById('d-funds').value);
+  if (isNaN(amount) || amount < 100) { showToast('⚠ Minimum top-up is $100.'); return; }
+  const btn = document.getElementById('d-funds-btn');
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    await fetch(WH_BILLING, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ADD_FUNDS', agencyId:currentAgency.id, stripeCustomerId:currentAgency.stripe_customer_id, amount, timestamp:new Date().toISOString() }) });
+    const nb = (parseFloat(currentAgency.balance)||0) + amount;
+    await sb.from('pcm_agencies').update({ balance: nb }).eq('id', currentAgency.id);
+    currentAgency.balance = nb;
+    document.getElementById('k-bal').textContent = '$' + nb.toFixed(2);
+    document.getElementById('d-funds').value = '';
+    showToast('✅ $' + amount.toFixed(2) + ' added successfully.');
+  } catch(e) { showToast('⚠ Payment failed. Please try again.'); }
+  btn.disabled = false; btn.textContent = 'ADD FUNDS';
+}
+
+/* ── TOGGLES ──────────────────────────────────────────────────────────────── */
+async function toggleAutoTopup(v) {
+  try {
+    await sb.from('pcm_agencies').update({ consent_p13: v }).eq('id', currentAgency.id);
+    currentAgency.consent_p13 = v;
+    document.getElementById('k-bal-sub').textContent = v ? 'Auto top-up ON at $100' : 'Auto top-up OFF';
+    if (v) {
+      // Arm the Make.com Stripe Auto Billing scenario (Scenario 3)
+      fetch(WH_BILLING, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ENABLE_AUTO_TOPUP', agencyId: currentAgency.id, stripeCustomerId: currentAgency.stripe_customer_id }) }).catch(()=>{});
+    }
+    showToast(v ? '✅ Auto top-up enabled.' : 'Auto top-up disabled.');
+  } catch(e) { showToast('⚠ Update failed.'); }
+}
+
+async function togglePause(paused) {
+  try {
+    const ns = paused ? 'paused' : 'active';
+    await sb.from('pcm_agencies').update({ status: ns }).eq('id', currentAgency.id);
+    currentAgency.status = ns;
+    const badge = document.getElementById('d-status-badge');
+    const stxt  = document.getElementById('d-status-txt');
+    if (paused) { badge.className='dash-status-badge s-paused'; stxt.textContent='PAUSED'; }
+    else        { badge.className='dash-status-badge s-active'; stxt.textContent='ACTIVE'; }
+    showToast(paused ? '⏸ Lead delivery paused.' : '▶ Lead delivery resumed.');
+  } catch(e) { showToast('⚠ Update failed.'); }
+}
+
+/* ── SAVE CAP ─────────────────────────────────────────────────────────────── */
+async function saveCap() {
+  const cap = parseInt(document.getElementById('d-cap-inp').value);
+  if (isNaN(cap) || cap < 1 || cap > 500) { showToast('⚠ Cap must be between 1 and 500.'); return; }
+  try {
+    await sb.from('pcm_agencies').update({ daily_cap: cap }).eq('id', currentAgency.id);
+    currentAgency.daily_cap = cap;
+    document.getElementById('k-cap').textContent = cap;
+    showToast('✅ Daily cap updated to ' + cap + ' leads.');
+  } catch(e) { showToast('⚠ Update failed.'); }
+}
+
+/* ── DISPUTE ──────────────────────────────────────────────────────────────── */
+function submitDispute() {
+  showToast('📩 Return request submitted. PCM will respond within 24 hours.');
+  fetch(WH_ENROLL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'LEAD_RETURN_REQUEST', agencyId:currentAgency.id, agencyName:currentAgency.name, timestamp:new Date().toISOString() }) }).catch(()=>{});
+}
+
+/* ── LOGOUT ───────────────────────────────────────────────────────────────── */
+function doLogout() {
+  currentAgency = null;
+  document.getElementById('vC-dash').style.display  = 'none';
+  document.getElementById('vC-login').style.display = 'block';
+  document.getElementById('login-id').value  = '';
+  document.getElementById('login-pin').value = '';
+  const btn = document.getElementById('login-btn');
+  btn.classList.remove('loading'); btn.disabled = false;
+  document.getElementById('login-err').classList.remove('on');
+}
+
+/* ── ERROR UTILS ──────────────────────────────────────────────────────────── */
+function showFerr(fid, iid) {
+  const f = document.getElementById(fid); const i = document.getElementById(iid);
+  if (f) f.classList.add('on'); if (i) i.classList.add('err');
+}
+function clrErr(fid) { const f = document.getElementById(fid); if(f) f.classList.remove('on'); }
+function clrAllErr() {
+  document.querySelectorAll('#pcm-portal .pp-ferr').forEach(e=>e.classList.remove('on'));
+  document.querySelectorAll('#pcm-portal .pp-err-banner').forEach(e=>e.classList.remove('on'));
+  document.querySelectorAll('#pcm-portal .err').forEach(e=>e.classList.remove('err'));
+}
+
+/* ── TOAST ────────────────────────────────────────────────────────────────── */
+let _tt = null;
+function showToast(msg) {
+  const t = document.getElementById('pp-toast');
+  t.textContent = msg; t.style.display = 'block';
+  if (_tt) clearTimeout(_tt);
+  _tt = setTimeout(() => { t.style.display = 'none'; }, 3500);
+}
+
+/* ── EXPOSE GLOBALS ───────────────────────────────────────────────────────── */
+window.showView        = showView;
+window.selVert         = selVert;
+window.toggleState     = toggleState;
+window.initStripe      = initStripe;
+window.submitEnroll    = submitEnroll;
+window.doLogin         = doLogin;
+window.addFunds        = addFunds;
+window.toggleAutoTopup = toggleAutoTopup;
+window.togglePause     = togglePause;
+window.saveCap         = saveCap;
+window.submitDispute   = submitDispute;
+window.doLogout        = doLogout;
+})();
+</script>
