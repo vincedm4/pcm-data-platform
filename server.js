@@ -12,7 +12,7 @@ const app     = express();
 const PORT    = process.env.PORT || 3000;
 
 // ── ENVIRONMENT VARIABLES (set these in Railway dashboard) ──
-// RETELL_API_KEY       = key_5a4975a05590014b4c72ed96001a
+// RETELL_API_KEY       = (set in Railway Variables tab — never commit the real key here)
 // ALLOWED_ORIGIN       = https://procapitaldata.com
 // PORT                 = (Railway sets this automatically)
 
