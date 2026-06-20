@@ -1,4 +1,4 @@
-PRO CAPITAL DATA — SOVEREIGN INTAKE + COMMAND SYSTEM v25 FINAL
+<!-- PRO CAPITAL DATA — SOVEREIGN INTAKE + COMMAND SYSTEM v25 FINAL -->
 <!-- Replaces v23. Rebrand: Pro Capital Health -> Pro Capital Data        -->
 <!-- SECURITY FIX 1: Retell API key removed from front-end (proxy ready) -->
 <!-- SECURITY FIX 2: Commander PIN moved to Supabase hash comparison     -->
@@ -7,7 +7,10 @@ PRO CAPITAL DATA — SOVEREIGN INTAKE + COMMAND SYSTEM v25 FINAL
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="https://unpkg.com/@retell-ai/web-js-sdk@latest/dist/index.umd.js"></script>
+<script type="module">
+  import { RetellWebClient } from "https://cdn.jsdelivr.net/npm/retell-client-js-sdk@2/+esm";
+  window.RetellWebClient = RetellWebClient;
+</script>
 
 <style>
 /* ── RESET + ISOLATION ──────────────────────────────────────────────────── */
@@ -863,7 +866,10 @@ async function pcmStartVoice() {
     pcmLog(`[RETELL] Session created — Call ID: ${call_id}`);
 
     /* Step 2 — Init Retell Web Client */
-    retellClient = new RetellWebClient();
+    if (typeof window.RetellWebClient !== 'function') {
+      throw new Error('Retell SDK module still loading — please wait a moment and try again.');
+    }
+    retellClient = new window.RetellWebClient();
 
     retellClient.on("call_started", () => {
       pcmLog("[RETELL] ✅ Commander AI is live.");
