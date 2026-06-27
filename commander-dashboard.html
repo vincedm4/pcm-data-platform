@@ -1,0 +1,353 @@
+<!-- PRO CAPITAL DATA — COMMANDER DASHBOARD v1                                  -->
+<!-- Separate from portal.html (which serves paying insurance agency clients). -->
+<!-- This page serves internal team only: Vincent (Commander), Harry, Giovanni. -->
+<!-- Access: PIN-based, hashed (SHA-256), verified against system_controls table.-->
+<!-- Default scope per role (Commander's explicit direction):                  -->
+<!--   harry    -> procurement + grants                                       -->
+<!--   giovanni -> leads (his insurance agency floor)                         -->
+<!--   commander -> everything                                                -->
+<!-- extra_access field allows Commander to temporarily expand someone's view  -->
+<!-- (e.g. before a business trip) by editing one row in Supabase directly —  -->
+<!-- no code changes needed for that.                                         -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro Capital Data — Commander Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  --blue: #1E40AF; --blue-lt: #4169E8; --blue-gl: rgba(30,64,175,.10);
+  --teal: #00D4AA; --gold: #FFBA08; --red: #EF4444; --green: #00C97A;
+  --dark: #02050A; --ink: #0A0F1E; --off: #F4F6FB; --border: #E2E8F0;
+  --muted: #5A6580; --mono: 'JetBrains Mono', monospace; --sans: 'DM Sans', sans-serif;
+  --display: 'Bebas Neue', sans-serif;
+  font-family: var(--sans); background: var(--off); color: var(--ink);
+  min-height: 100vh; padding: 24px 16px;
+}
+.wrap { max-width: 720px; margin: 0 auto; }
+.card {
+  background: #fff; border-radius: 16px; padding: 32px;
+  box-shadow: 0 8px 30px rgba(10,15,30,.08); border: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+h1 { font-family: var(--display); font-size: 28px; letter-spacing: 1px; margin-bottom: 4px; }
+.sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+.lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin-bottom: 6px; display: block; }
+input {
+  width: 100%; padding: 14px 16px; border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 16px; outline: none; margin-bottom: 14px; font-family: var(--mono);
+  letter-spacing: 2px; text-align: center;
+}
+input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-gl); }
+button {
+  width: 100%; padding: 15px; background: var(--blue); color: #fff; border: none;
+  border-radius: 10px; font-family: var(--display); font-size: 18px; letter-spacing: 1px;
+  cursor: pointer; transition: transform .15s;
+}
+button:hover { transform: translateY(-1px); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.err { color: var(--red); font-size: 13px; margin-top: -6px; margin-bottom: 12px; display: none; }
+.err.on { display: block; }
+
+.section-ttl {
+  font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px;
+  color: var(--muted); margin: 28px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.section-ttl:first-child { margin-top: 0; }
+
+.row {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 14px 0; border-bottom: 1px solid var(--border); gap: 12px;
+}
+.row:last-child { border-bottom: none; }
+.row-main { flex: 1; }
+.row-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.row-summary { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.row-meta { text-align: right; flex-shrink: 0; }
+.deadline { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.deadline.soon { color: var(--red); }
+.tag {
+  display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 5px; margin-top: 4px; letter-spacing: .5px;
+}
+.tag.clothing { background: #EFF6FF; color: var(--blue); }
+.tag.subsistence { background: #ECFDF5; color: #047857; }
+.tag.petroleum { background: #FFF7ED; color: #C2410C; }
+.tag.medical { background: #FDF2F8; color: #BE185D; }
+.tag.eligible { background: #ECFDF5; color: #047857; }
+.tag.review { background: #FEF3C7; color: #92400E; }
+
+.empty { text-align: center; color: var(--muted); font-size: 13px; padding: 24px; }
+.loading { text-align: center; color: var(--muted); font-size: 13px; padding: 24px; }
+.header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.logout-link { font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: underline; }
+.role-badge {
+  display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700;
+  background: var(--blue-gl); color: var(--blue); padding: 4px 10px; border-radius: 6px;
+  margin-bottom: 20px; letter-spacing: .5px; text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- ═══════════ LOGIN VIEW ═══════════ -->
+  <div id="view-login" class="card">
+    <h1>PRO CAPITAL DATA</h1>
+    <p class="sub">Commander Dashboard — Enter your PIN</p>
+    <label class="lbl">PIN</label>
+    <input type="password" id="pin-input" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="off">
+    <div class="err" id="login-err">Incorrect PIN. Please try again.</div>
+    <button id="login-btn" onclick="doLogin()">ENTER</button>
+  </div>
+
+  <!-- ═══════════ DASHBOARD VIEW ═══════════ -->
+  <div id="view-dashboard" style="display:none;">
+    <div class="card">
+      <div class="header-bar">
+        <h1 id="welcome-name">Welcome</h1>
+        <span class="logout-link" onclick="doLogout()">Log out</span>
+      </div>
+      <div class="role-badge" id="role-badge">Role</div>
+    </div>
+
+    <div class="card" id="section-procurement" style="display:none;">
+      <div class="section-ttl">Procurement &amp; Solicitations</div>
+      <div id="procurement-list" class="loading">Loading…</div>
+    </div>
+
+    <div class="card" id="section-grants" style="display:none;">
+      <div class="section-ttl">Grant Opportunities</div>
+      <div id="grants-list" class="loading">Loading…</div>
+    </div>
+
+    <div class="card" id="section-leads" style="display:none;">
+      <div class="section-ttl">Insurance Agency Leads</div>
+      <div id="leads-list" class="loading">Loading…</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  const SUPABASE_URL = "https://soyavidxbcxmifwnshhh.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_MBr27IBzEDWbvWOEwr8xTg_rKfRkPfR"; // safe to expose — publishable key only
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let currentUser = null; // { id, role, extra_access }
+
+  async function sha256Hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function doLogin() {
+    const pin = document.getElementById('pin-input').value.trim();
+    const btn = document.getElementById('login-btn');
+    const errEl = document.getElementById('login-err');
+    errEl.classList.remove('on');
+
+    if (!pin) return;
+    btn.disabled = true; btn.textContent = 'CHECKING…';
+
+    try {
+      const pinHash = await sha256Hex(pin);
+      const { data, error } = await sb
+        .from('system_controls')
+        .select('id, role, pin_hash, extra_access')
+        .eq('pin_hash', pinHash)
+        .maybeSingle();
+
+      if (error || !data) {
+        errEl.classList.add('on');
+        btn.disabled = false; btn.textContent = 'ENTER';
+        return;
+      }
+
+      currentUser = data;
+      showDashboard();
+    } catch (e) {
+      errEl.classList.add('on');
+      btn.disabled = false; btn.textContent = 'ENTER';
+    }
+  }
+
+  function showDashboard() {
+    document.getElementById('view-login').style.display = 'none';
+    document.getElementById('view-dashboard').style.display = 'block';
+
+    const nameMap = { commander: 'Vincent', harry: 'Harry', giovanni: 'Giovanni' };
+    document.getElementById('welcome-name').textContent = 'Welcome, ' + (nameMap[currentUser.id] || currentUser.id);
+    document.getElementById('role-badge').textContent = currentUser.role || currentUser.id;
+
+    const extra = Array.isArray(currentUser.extra_access) ? currentUser.extra_access : [];
+    const role = currentUser.role || currentUser.id;
+
+    const showProcurement = role === 'commander' || role === 'harry' || extra.includes('procurement');
+    const showGrants      = role === 'commander' || role === 'harry' || extra.includes('grants');
+    const showLeads       = role === 'commander' || role === 'giovanni' || extra.includes('leads');
+
+    if (showProcurement) { document.getElementById('section-procurement').style.display = 'block'; loadProcurement(); }
+    if (showGrants)      { document.getElementById('section-grants').style.display = 'block'; loadGrants(); }
+    if (showLeads)        { document.getElementById('section-leads').style.display = 'block'; loadLeads(); }
+  }
+
+  function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    const now = new Date();
+    return Math.ceil((d - now) / (1000 * 60 * 60 * 24));
+  }
+
+  async function loadProcurement() {
+    const box = document.getElementById('procurement-list');
+    try {
+      const { data, error } = await sb
+        .from('pcm_procurement_pipeline')
+        .select('solicitation_id, title, plain_summary, deadline, supply_classes, is_relevant')
+        .eq('is_relevant', true)
+        .order('deadline', { ascending: true })
+        .limit(25);
+
+      if (error || !data || !data.length) {
+        box.innerHTML = '<div class="empty">No relevant solicitations right now.</div>';
+        return;
+      }
+
+      box.innerHTML = data.map(r => {
+        const days = daysUntil(r.deadline);
+        const deadlineClass = (days !== null && days <= 7) ? 'soon' : '';
+        const deadlineText = r.deadline ? new Date(r.deadline).toLocaleDateString() : 'No deadline listed';
+        const vertical = (r.supply_classes && r.supply_classes.length) ? guessVertical(r.supply_classes[0]) : '';
+        return `
+          <div class="row">
+            <div class="row-main">
+              <div class="row-title">${escapeHtml(r.title || r.solicitation_id)}</div>
+              <div class="row-summary">${escapeHtml(r.plain_summary || 'No summary available.')}</div>
+              ${vertical ? `<span class="tag ${vertical}">${vertical}</span>` : ''}
+            </div>
+            <div class="row-meta">
+              <div class="deadline ${deadlineClass}">${deadlineText}</div>
+              ${days !== null ? `<div style="font-size:11px;color:var(--muted);">${days} day${days===1?'':'s'} left</div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    } catch (e) {
+      box.innerHTML = '<div class="empty">Unable to load procurement data.</div>';
+    }
+  }
+
+  function guessVertical(psc) {
+    const clothing = ['8405','8415','8430'];
+    const subsistence = ['8905','8910','8915','8920','8940','8950','8955','8960','8970'];
+    const petroleum = ['9130'];
+    const medical = ['6515','6520','6525'];
+    if (clothing.includes(psc)) return 'clothing';
+    if (subsistence.includes(psc)) return 'subsistence';
+    if (petroleum.includes(psc)) return 'petroleum';
+    if (medical.includes(psc)) return 'medical';
+    return '';
+  }
+
+  async function loadGrants() {
+    const box = document.getElementById('grants-list');
+    try {
+      const { data, error } = await sb
+        .from('pcm_grant_opportunities')
+        .select('opportunity_number, title, agency, close_date, potentially_eligible_for_profit')
+        .eq('potentially_eligible_for_profit', true)
+        .order('close_date', { ascending: true })
+        .limit(25);
+
+      if (error || !data || !data.length) {
+        box.innerHTML = '<div class="empty">No possibly-eligible grants right now.</div>';
+        return;
+      }
+
+      box.innerHTML = data.map(r => {
+        const days = daysUntil(r.close_date);
+        const deadlineClass = (days !== null && days <= 7) ? 'soon' : '';
+        const deadlineText = r.close_date ? new Date(r.close_date).toLocaleDateString() : 'No deadline listed';
+        return `
+          <div class="row">
+            <div class="row-main">
+              <div class="row-title">${escapeHtml(r.title || r.opportunity_number)}</div>
+              <div class="row-summary">${escapeHtml(r.agency || '')}</div>
+              <span class="tag eligible">Possibly Eligible</span>
+            </div>
+            <div class="row-meta">
+              <div class="deadline ${deadlineClass}">${deadlineText}</div>
+              ${days !== null ? `<div style="font-size:11px;color:var(--muted);">${days} day${days===1?'':'s'} left</div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    } catch (e) {
+      box.innerHTML = '<div class="empty">Unable to load grant data.</div>';
+    }
+  }
+
+  async function loadLeads() {
+    const box = document.getElementById('leads-list');
+    try {
+      const { data, error } = await sb
+        .from('pcm_agencies')
+        .select('id, contact_name, vertical, leads_delivered, status')
+        .order('leads_delivered', { ascending: false })
+        .limit(25);
+
+      if (error || !data || !data.length) {
+        box.innerHTML = '<div class="empty">No agency lead data available.</div>';
+        return;
+      }
+
+      box.innerHTML = data.map(r => `
+        <div class="row">
+          <div class="row-main">
+            <div class="row-title">${escapeHtml(r.contact_name || r.id)}</div>
+            <div class="row-summary">${escapeHtml((r.vertical || '').replace(/_/g, ' / '))} — ${r.leads_delivered || 0} leads delivered</div>
+          </div>
+          <div class="row-meta">
+            <span class="tag ${r.status === 'active' ? 'eligible' : 'review'}">${escapeHtml(r.status || 'unknown')}</span>
+          </div>
+        </div>`
+      ).join('');
+    } catch (e) {
+      box.innerHTML = '<div class="empty">Unable to load leads data.</div>';
+    }
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function doLogout() {
+    currentUser = null;
+    document.getElementById('view-dashboard').style.display = 'none';
+    document.getElementById('view-login').style.display = 'block';
+    document.getElementById('pin-input').value = '';
+    document.getElementById('login-btn').disabled = false;
+    document.getElementById('login-btn').textContent = 'ENTER';
+    ['section-procurement', 'section-grants', 'section-leads'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
+    });
+  }
+
+  document.getElementById('pin-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  window.doLogin = doLogin;
+  window.doLogout = doLogout;
+})();
+</script>
+
+</body>
+</html>
