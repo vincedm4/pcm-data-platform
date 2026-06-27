@@ -224,7 +224,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
       const todayIso = new Date().toISOString().slice(0, 10);
       const { data, error } = await sb
         .from('pcm_procurement_pipeline')
-        .select('solicitation_id, title, plain_summary, deadline, supply_classes, is_relevant, action_url')
+        .select('solicitation_id, title, plain_summary, deadline, vertical, is_relevant, action_url')
         .eq('is_relevant', true)
         .gte('deadline', todayIso)
         .order('deadline', { ascending: true })
@@ -239,7 +239,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
         const days = daysUntil(r.deadline);
         const deadlineClass = (days !== null && days <= 7) ? 'soon' : '';
         const deadlineText = r.deadline ? new Date(r.deadline).toLocaleDateString() : 'No deadline listed';
-        const vertical = (r.supply_classes && r.supply_classes.length) ? guessVertical(r.supply_classes[0]) : '';
+        const vertical = (r.vertical || '').toLowerCase();
         const linkHtml = r.action_url
           ? `<a href="${escapeHtml(r.action_url)}" target="_blank" rel="noopener" class="sol-link">View on SAM.gov →</a>`
           : '';
@@ -261,18 +261,6 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     } catch (e) {
       box.innerHTML = '<div class="empty">Unable to load procurement data.</div>';
     }
-  }
-
-  function guessVertical(psc) {
-    const clothing = ['8405','8415','8430'];
-    const subsistence = ['8905','8910','8915','8920','8940','8950','8955','8960','8970'];
-    const petroleum = ['9130'];
-    const medical = ['6515','6520','6525'];
-    if (clothing.includes(psc)) return 'clothing';
-    if (subsistence.includes(psc)) return 'subsistence';
-    if (petroleum.includes(psc)) return 'petroleum';
-    if (medical.includes(psc)) return 'medical';
-    return '';
   }
 
   async function loadGrants() {
