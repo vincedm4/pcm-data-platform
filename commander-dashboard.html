@@ -132,6 +132,11 @@ button:disabled { opacity: .5; cursor: not-allowed; }
       <div id="grants-list" class="loading">Loading…</div>
     </div>
 
+    <div class="card" id="section-auctions" style="display:none;">
+      <div class="section-ttl">GSA Surplus Auctions — Vehicles (FL/TX)</div>
+      <div id="auctions-list" class="loading">Loading…</div>
+    </div>
+
     <div class="card" id="section-leads" style="display:none;">
       <div class="section-ttl">Insurance Agency Leads</div>
       <div id="leads-list" class="loading">Loading…</div>
@@ -197,10 +202,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 
     const showProcurement = role === 'commander' || role === 'harry' || extra.includes('procurement');
     const showGrants      = role === 'commander' || role === 'harry' || extra.includes('grants');
+    const showAuctions    = true; // Commander's direction: GSA Auctions visible to everyone by default
     const showLeads       = role === 'commander' || role === 'giovanni' || extra.includes('leads');
 
     if (showProcurement) { document.getElementById('section-procurement').style.display = 'block'; loadProcurement(); }
     if (showGrants)      { document.getElementById('section-grants').style.display = 'block'; loadGrants(); }
+    if (showAuctions)    { document.getElementById('section-auctions').style.display = 'block'; loadAuctions(); }
     if (showLeads)        { document.getElementById('section-leads').style.display = 'block'; loadLeads(); }
   }
 
@@ -214,10 +221,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   async function loadProcurement() {
     const box = document.getElementById('procurement-list');
     try {
+      const todayIso = new Date().toISOString().slice(0, 10);
       const { data, error } = await sb
         .from('pcm_procurement_pipeline')
         .select('solicitation_id, title, plain_summary, deadline, supply_classes, is_relevant, action_url')
         .eq('is_relevant', true)
+        .gte('deadline', todayIso)
         .order('deadline', { ascending: true })
         .limit(25);
 
@@ -269,10 +278,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   async function loadGrants() {
     const box = document.getElementById('grants-list');
     try {
+      const todayIsoG = new Date().toISOString().slice(0, 10);
       const { data, error } = await sb
         .from('pcm_grant_opportunities')
         .select('opportunity_number, title, agency, close_date, potentially_eligible_for_profit, action_url')
         .eq('potentially_eligible_for_profit', true)
+        .gte('close_date', todayIsoG)
         .order('close_date', { ascending: true })
         .limit(25);
 
@@ -338,6 +349,45 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     }
   }
 
+  async function loadAuctions() {
+    const box = document.getElementById('auctions-list');
+    try {
+      const { data, error } = await sb
+        .from('pcm_gsa_auctions')
+        .select('sale_no, lot_no, item_name, auction_end_date, property_city, property_state, high_bid_amount, within_budget, action_url')
+        .eq('within_budget', true)
+        .order('auction_end_date', { ascending: true })
+        .limit(25);
+
+      if (error || !data || !data.length) {
+        box.innerHTML = '<div class="empty">No matching vehicle auctions within budget right now.</div>';
+        return;
+      }
+
+      box.innerHTML = data.map(r => {
+        const linkHtml = r.action_url
+          ? `<a href="${escapeHtml(r.action_url)}" target="_blank" rel="noopener" class="sol-link">View on GSA Auctions →</a>`
+          : `<a href="https://gsaauctions.gov/auctions/home" target="_blank" rel="noopener" class="sol-link">Search Sale #${escapeHtml(r.sale_no || '')} on GSA Auctions →</a>`;
+        const bidText = (r.high_bid_amount != null) ? `$${Number(r.high_bid_amount).toLocaleString()}` : 'No bids yet';
+        return `
+          <div class="row">
+            <div class="row-main">
+              <div class="row-title">${escapeHtml(r.item_name || 'Unnamed item')}</div>
+              <div class="sol-id">Sale ${escapeHtml(r.sale_no || '')} — Lot ${escapeHtml(r.lot_no || '')}</div>
+              <div class="row-summary">${escapeHtml(r.property_city || '')}, ${escapeHtml(r.property_state || '')} — Current bid: ${bidText}</div>
+              <span class="tag eligible">Within Budget</span>
+              ${linkHtml}
+            </div>
+            <div class="row-meta">
+              <div class="deadline">${r.auction_end_date ? new Date(r.auction_end_date).toLocaleDateString() : 'No end date'}</div>
+            </div>
+          </div>`;
+      }).join('');
+    } catch (e) {
+      box.innerHTML = '<div class="empty">Unable to load auction data.</div>';
+    }
+  }
+
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str == null ? '' : String(str);
@@ -351,7 +401,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     document.getElementById('pin-input').value = '';
     document.getElementById('login-btn').disabled = false;
     document.getElementById('login-btn').textContent = 'ENTER';
-    ['section-procurement', 'section-grants', 'section-leads'].forEach(id => {
+    ['section-procurement', 'section-grants', 'section-auctions', 'section-leads'].forEach(id => {
       document.getElementById(id).style.display = 'none';
     });
   }
