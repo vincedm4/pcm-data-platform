@@ -66,6 +66,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .row:last-child { border-bottom: none; }
 .row-main { flex: 1; }
 .row-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.sol-id { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.sol-link {
+  display: inline-block; font-size: 12px; font-weight: 700; color: var(--blue);
+  text-decoration: none; margin-top: 6px;
+}
+.sol-link:hover { text-decoration: underline; }
 .row-summary { font-size: 13px; color: var(--muted); line-height: 1.5; }
 .row-meta { text-align: right; flex-shrink: 0; }
 .deadline { font-family: var(--mono); font-size: 12px; font-weight: 700; }
@@ -210,7 +216,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     try {
       const { data, error } = await sb
         .from('pcm_procurement_pipeline')
-        .select('solicitation_id, title, plain_summary, deadline, supply_classes, is_relevant')
+        .select('solicitation_id, title, plain_summary, deadline, supply_classes, is_relevant, action_url')
         .eq('is_relevant', true)
         .order('deadline', { ascending: true })
         .limit(25);
@@ -225,12 +231,17 @@ button:disabled { opacity: .5; cursor: not-allowed; }
         const deadlineClass = (days !== null && days <= 7) ? 'soon' : '';
         const deadlineText = r.deadline ? new Date(r.deadline).toLocaleDateString() : 'No deadline listed';
         const vertical = (r.supply_classes && r.supply_classes.length) ? guessVertical(r.supply_classes[0]) : '';
+        const linkHtml = r.action_url
+          ? `<a href="${escapeHtml(r.action_url)}" target="_blank" rel="noopener" class="sol-link">View on SAM.gov →</a>`
+          : '';
         return `
           <div class="row">
             <div class="row-main">
               <div class="row-title">${escapeHtml(r.title || r.solicitation_id)}</div>
+              <div class="sol-id">${escapeHtml(r.solicitation_id || '')}</div>
               <div class="row-summary">${escapeHtml(r.plain_summary || 'No summary available.')}</div>
               ${vertical ? `<span class="tag ${vertical}">${vertical}</span>` : ''}
+              ${linkHtml}
             </div>
             <div class="row-meta">
               <div class="deadline ${deadlineClass}">${deadlineText}</div>
@@ -260,7 +271,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     try {
       const { data, error } = await sb
         .from('pcm_grant_opportunities')
-        .select('opportunity_number, title, agency, close_date, potentially_eligible_for_profit')
+        .select('opportunity_number, title, agency, close_date, potentially_eligible_for_profit, action_url')
         .eq('potentially_eligible_for_profit', true)
         .order('close_date', { ascending: true })
         .limit(25);
@@ -274,12 +285,17 @@ button:disabled { opacity: .5; cursor: not-allowed; }
         const days = daysUntil(r.close_date);
         const deadlineClass = (days !== null && days <= 7) ? 'soon' : '';
         const deadlineText = r.close_date ? new Date(r.close_date).toLocaleDateString() : 'No deadline listed';
+        const linkHtml = r.action_url
+          ? `<a href="${escapeHtml(r.action_url)}" target="_blank" rel="noopener" class="sol-link">View on Grants.gov →</a>`
+          : '';
         return `
           <div class="row">
             <div class="row-main">
               <div class="row-title">${escapeHtml(r.title || r.opportunity_number)}</div>
+              <div class="sol-id">${escapeHtml(r.opportunity_number || '')}</div>
               <div class="row-summary">${escapeHtml(r.agency || '')}</div>
               <span class="tag eligible">Possibly Eligible</span>
+              ${linkHtml}
             </div>
             <div class="row-meta">
               <div class="deadline ${deadlineClass}">${deadlineText}</div>
