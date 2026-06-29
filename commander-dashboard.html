@@ -222,20 +222,35 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     const box = document.getElementById('procurement-list');
     try {
       const todayIso = new Date().toISOString().slice(0, 10);
-      const { data, error } = await sb
-        .from('pcm_procurement_pipeline')
-        .select('solicitation_id, title, plain_summary, deadline, vertical, is_relevant, action_url')
-        .eq('is_relevant', true)
-        .gte('deadline', todayIso)
-        .order('deadline', { ascending: true })
-        .limit(25);
+      const verticals = ['CLOTHING', 'SUBSISTENCE', 'PETROLEUM', 'MEDICAL'];
 
-      if (error || !data || !data.length) {
+      // Query each vertical SEPARATELY with its own small limit, so
+      // one urgent category (e.g. items expiring soon) can never
+      // crowd out the others — confirmed real issue: Medical's
+      // soon-expiring items were filling the entire combined limit
+      // before Petroleum/Clothing/Subsistence ever got a chance to show.
+      const results = await Promise.all(verticals.map(v =>
+        sb.from('pcm_procurement_pipeline')
+          .select('solicitation_id, title, plain_summary, deadline, vertical, is_relevant, action_url')
+          .eq('is_relevant', true)
+          .eq('vertical', v)
+          .gte('deadline', todayIso)
+          .order('deadline', { ascending: true })
+          .limit(8)
+      ));
+
+      let allRows = [];
+      results.forEach(r => { if (r.data) allRows = allRows.concat(r.data); });
+      // Re-sort the combined set by deadline for display, while still
+      // guaranteeing each vertical got its own guaranteed slice above.
+      allRows.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+
+      if (!allRows.length) {
         box.innerHTML = '<div class="empty">No relevant solicitations right now.</div>';
         return;
       }
 
-      box.innerHTML = data.map(r => {
+      box.innerHTML = allRows.map(r => {
         const days = daysUntil(r.deadline);
         const deadlineClass = (days !== null && days <= 7) ? 'soon' : '';
         const deadlineText = r.deadline ? new Date(r.deadline).toLocaleDateString() : 'No deadline listed';
