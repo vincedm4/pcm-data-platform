@@ -127,11 +127,6 @@ button:disabled { opacity: .5; cursor: not-allowed; }
       <div id="procurement-list" class="loading">Loading…</div>
     </div>
 
-    <div class="card" id="section-grants" style="display:none;">
-      <div class="section-ttl">Grant Opportunities</div>
-      <div id="grants-list" class="loading">Loading…</div>
-    </div>
-
     <div class="card" id="section-auctions" style="display:none;">
       <div class="section-ttl">GSA Surplus Auctions — Within Budget Nationwide</div>
       <div id="auctions-list" class="loading">Loading…</div>
@@ -201,12 +196,10 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     const role = currentUser.role || currentUser.id;
 
     const showProcurement = role === 'commander' || role === 'harry' || extra.includes('procurement');
-    const showGrants      = role === 'commander' || role === 'harry' || extra.includes('grants');
     const showAuctions    = true; // Commander's direction: GSA Auctions visible to everyone by default
     const showLeads       = role === 'commander' || role === 'giovanni' || extra.includes('leads');
 
     if (showProcurement) { document.getElementById('section-procurement').style.display = 'block'; loadProcurement(); }
-    if (showGrants)      { document.getElementById('section-grants').style.display = 'block'; loadGrants(); }
     if (showAuctions)    { document.getElementById('section-auctions').style.display = 'block'; loadAuctions(); }
     if (showLeads)        { document.getElementById('section-leads').style.display = 'block'; loadLeads(); }
   }
@@ -275,50 +268,6 @@ button:disabled { opacity: .5; cursor: not-allowed; }
       }).join('');
     } catch (e) {
       box.innerHTML = '<div class="empty">Unable to load procurement data.</div>';
-    }
-  }
-
-  async function loadGrants() {
-    const box = document.getElementById('grants-list');
-    try {
-      const todayIsoG = new Date().toISOString().slice(0, 10);
-      const { data, error } = await sb
-        .from('pcm_grant_opportunities')
-        .select('opportunity_number, title, agency, close_date, potentially_eligible_for_profit, action_url')
-        .eq('potentially_eligible_for_profit', true)
-        .gte('close_date', todayIsoG)
-        .order('close_date', { ascending: true })
-        .limit(25);
-
-      if (error || !data || !data.length) {
-        box.innerHTML = '<div class="empty">No possibly-eligible grants right now.</div>';
-        return;
-      }
-
-      box.innerHTML = data.map(r => {
-        const days = daysUntil(r.close_date);
-        const deadlineClass = (days !== null && days <= 7) ? 'soon' : '';
-        const deadlineText = r.close_date ? new Date(r.close_date).toLocaleDateString() : 'No deadline listed';
-        const linkHtml = r.action_url
-          ? `<a href="${escapeHtml(r.action_url)}" target="_blank" rel="noopener" class="sol-link">View on Grants.gov →</a>`
-          : '';
-        return `
-          <div class="row">
-            <div class="row-main">
-              <div class="row-title">${escapeHtml(r.title || r.opportunity_number)}</div>
-              <div class="sol-id">${escapeHtml(r.opportunity_number || '')}</div>
-              <div class="row-summary">${escapeHtml(r.agency || '')}</div>
-              <span class="tag eligible">Possibly Eligible</span>
-              ${linkHtml}
-            </div>
-            <div class="row-meta">
-              <div class="deadline ${deadlineClass}">${deadlineText}</div>
-              ${days !== null ? `<div style="font-size:11px;color:var(--muted);">${days} day${days===1?'':'s'} left</div>` : ''}
-            </div>
-          </div>`;
-      }).join('');
-    } catch (e) {
-      box.innerHTML = '<div class="empty">Unable to load grant data.</div>';
     }
   }
 
@@ -406,7 +355,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     document.getElementById('pin-input').value = '';
     document.getElementById('login-btn').disabled = false;
     document.getElementById('login-btn').textContent = 'ENTER';
-    ['section-procurement', 'section-grants', 'section-auctions', 'section-leads'].forEach(id => {
+    ['section-procurement', 'section-auctions', 'section-leads'].forEach(id => {
       document.getElementById(id).style.display = 'none';
     });
   }
