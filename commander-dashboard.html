@@ -358,12 +358,11 @@ button:disabled { opacity: .5; cursor: not-allowed; }
       const { data, error } = await sb
         .from('pcm_gsa_auctions')
         .select('sale_no, lot_no, item_name, auction_end_date, property_city, property_state, high_bid_amount, within_budget, action_url')
-        .eq('within_budget', true)
         .order('auction_end_date', { ascending: true })
         .limit(25);
 
       if (error || !data || !data.length) {
-        box.innerHTML = '<div class="empty">No matching vehicle auctions within budget right now.</div>';
+        box.innerHTML = '<div class="empty">No active auctions right now.</div>';
         return;
       }
 
@@ -372,13 +371,16 @@ button:disabled { opacity: .5; cursor: not-allowed; }
           ? `<a href="${escapeHtml(r.action_url)}" target="_blank" rel="noopener" class="sol-link">View on GSA Auctions →</a>`
           : `<a href="https://gsaauctions.gov/auctions/home" target="_blank" rel="noopener" class="sol-link">Search Sale #${escapeHtml(r.sale_no || '')} on GSA Auctions →</a>`;
         const bidText = (r.high_bid_amount != null) ? `$${Number(r.high_bid_amount).toLocaleString()}` : 'No bids yet';
+        const budgetTag = r.within_budget
+          ? `<span class="tag eligible">Under $23,999</span>`
+          : `<span class="tag review">Over $23,999</span>`;
         return `
           <div class="row">
             <div class="row-main">
               <div class="row-title">${escapeHtml(r.item_name || 'Unnamed item')}</div>
               <div class="sol-id">Sale ${escapeHtml(r.sale_no || '')} — Lot ${escapeHtml(r.lot_no || '')}</div>
               <div class="row-summary">${escapeHtml(r.property_city || '')}, ${escapeHtml(r.property_state || '')} — Current bid: ${bidText}</div>
-              <span class="tag eligible">Within Budget</span>
+              ${budgetTag}
               ${linkHtml}
             </div>
             <div class="row-meta">
